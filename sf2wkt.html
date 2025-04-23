@@ -1,0 +1,183 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Get WKT from Spatial features</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet Draw -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+  <!-- Leaflet Providers -->
+  <script src="https://unpkg.com/leaflet-providers@latest/leaflet-providers.js"></script>
+
+  <!-- Intro.js -->
+  <link rel="stylesheet" href="https://unpkg.com/intro.js/minified/introjs.min.css" />
+  <script src="https://unpkg.com/intro.js/minified/intro.min.js"></script>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+    }
+
+    #map {
+      height: 500px;
+    }
+
+    #toolbar {
+      padding: 10px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #ccc;
+    }
+
+    #container {
+      padding: 10px 20px;
+      max-width: 800px;
+      margin-left: 40px;
+    }
+
+    label, textarea {
+      display: block;
+      margin-bottom: 10px;
+      width: 800px;
+      margin-left: 40px;
+    }
+
+    textarea {
+      height: 100px;
+      font-family: monospace;
+    }
+
+    button {
+      padding: 6px 12px;
+      margin-left: 40px;
+      background-color: #1B365D; 
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #3C8045;
+    }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button id="tutorial-button" onclick="introJs().start()">Tutorial</button>
+</div>
+
+<div id="map" data-intro="Este es el mapa base. Puedes acercarte, alejarte y moverte."></div>
+
+<div id="container" data-intro="Aquí verás, en formato WKT, el resultado de las geometrías que dibujes.">
+  <fieldset style="border: none; padding: 0;">
+    <label for="wkt">Geometría:</label>
+    <textarea id="wkt" readonly></textarea>
+    <button onclick="copiarWKT()" data-intro="Este botón copia el texto generado al portapapeles.">Copiar Información Espacial</button>
+    <button onclick="borrarGeometria()">Borrar Geometría</button>
+  </fieldset>
+</div>
+
+<script>
+  window.onload = function () {
+    if (!localStorage.getItem("tutorialShown")) {
+      introJs().start();
+      localStorage.setItem("tutorialShown", "true");
+    }
+  };
+
+  const map = L.map('map').setView([40, -3], 7);
+
+  const base = {
+    'CartoDB.Positron': L.tileLayer.provider('CartoDB.Positron').addTo(map),
+    'Esri Satélite': L.tileLayer.provider('Esri.WorldImagery'),
+    'Esri.WorldTopoMap': L.tileLayer.provider('Esri.WorldTopoMap')
+  };
+
+  const overlays = {};
+  L.control.layers(base, overlays, {collapsed: true}).addTo(map);
+
+  const drawnItems = new L.FeatureGroup();
+  map.addLayer(drawnItems);
+
+  const drawControl = new L.Control.Draw({
+    edit: { featureGroup: drawnItems },
+    draw: {
+      polygon: true,
+      polyline: false,
+      rectangle: true,
+      polyline: true,
+      marker: true,
+      circle: false,
+      circlemarker: false
+    }
+  });
+  map.addControl(drawControl);
+
+  function coordsToWKT(coords) {
+    return coords.map(c => c.join(" ")).join(", ");
+  }
+
+  function toWKT(geojson) {
+    const type = geojson.type;
+    const coords = geojson.coordinates;
+
+    switch (type) {
+      case "Point":
+        return `POINT (${coords.join(" ")})`;
+      case "LineString":
+        return `LINESTRING (${coordsToWKT(coords)})`;
+      case "Polygon":
+        return `POLYGON ((${coordsToWKT(coords[0])}))`;
+      case "MultiPolygon":
+        return `MULTIPOLYGON (${coords.map(ring => '((' + coordsToWKT(ring[0]) + '))').join(", ")})`;
+      default:
+        return "UNSUPPORTED GEOMETRY";
+    }
+  }
+
+  function updateWKT() {
+    const layers = drawnItems.getLayers();
+    if (layers.length > 0) {
+      const geojson = layers[0].toGeoJSON().geometry;
+      const wkt = toWKT(geojson);
+      document.getElementById("wkt").value = wkt;
+    } else {
+      document.getElementById("wkt").value = '';
+    }
+  }
+
+  function copiarWKT() {
+    const textarea = document.getElementById("wkt");
+    textarea.select();
+    textarea.setSelectionRange(0, 99999);
+    document.execCommand("copy");
+    alert("Información espacial copiada al portapapeles");
+  }
+
+  function borrarGeometria() {
+    drawnItems.clearLayers();
+    updateWKT();
+  }
+
+  map.on('draw:created', function (e) {
+    drawnItems.clearLayers();
+    drawnItems.addLayer(e.layer);
+    updateWKT();
+  });
+
+  map.on('draw:edited', updateWKT);
+  map.on('draw:deleted', updateWKT);
+</script>
+
+</body>
+</html>
